@@ -4,29 +4,48 @@ import api from "../../api/client";
 export default function LecturerExamSchedulesPage() {
     const [examList, setExamList] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [tableLoading, setTableLoading] = useState(false);
     const [error, setError] = useState(null);
     const [search, setSearch] = useState("");
     const [filterStatus, setFilterStatus] = useState("all");
 
-    useEffect(() => {
-        api.get("/lecturer/exam-schedules")
-            .then(res => {
-                const data = res.data?.data?.data || res.data?.data || res.data || [];
-                setExamList(Array.isArray(data) ? data : []);
-            })
-            .catch(() => setError("Lỗi khi tải dữ liệu lịch thi"))
-            .finally(() => setLoading(false));
-    }, []);
+    const PAGE_SIZE = 10;
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalCount, setTotalCount] = useState(0);
+    const [perPage, setPerPage] = useState(10);
 
-    const filtered = examList.filter(exam => {
-        const q = search.toLowerCase();
-        const matchSearch =
-            (exam.subject_name || "").toLowerCase().includes(q) ||
-            (exam.room || "").toLowerCase().includes(q) ||
-            (exam.subject_code || "").toLowerCase().includes(q);
-        const matchStatus = filterStatus === "all" || exam.status === filterStatus;
-        return matchSearch && matchStatus;
-    });
+    const fetchExams = async (page, searchVal, statusVal, isFirst = false) => {
+        isFirst ? setLoading(true) : setTableLoading(true);
+        try {
+            const params = new URLSearchParams({ page, per_page: PAGE_SIZE });
+            if (searchVal) params.append("search", searchVal);
+            if (statusVal && statusVal !== "all") params.append("status", statusVal);
+
+            const res = await api.get(`/lecturer/exam-schedules?${params.toString()}`);
+            const studentData = res.data?.data;
+            const items = studentData?.data ?? (Array.isArray(studentData) ? studentData : []);
+            const total = studentData?.total ?? items.length;
+            const actualPerPage = studentData?.per_page ?? PAGE_SIZE;
+            setExamList(items);
+            setTotalCount(total);
+            setPerPage(actualPerPage);
+        } catch {
+            setExamList([]);
+            setTotalCount(0);
+            setError("Lỗi khi tải dữ liệu lịch thi");
+        } finally {
+            isFirst ? setLoading(false) : setTableLoading(false);
+        }
+    };
+
+    useEffect(() => { fetchExams(1, "", "all", true); }, []);
+    useEffect(() => { fetchExams(currentPage, search, filterStatus); }, [currentPage]);
+    useEffect(() => {
+        setCurrentPage(1);
+        fetchExams(1, search, filterStatus);
+    }, [search, filterStatus]);
+
+    const totalPages = Math.ceil(totalCount / perPage);
 
     if (loading) return (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", color: "#64748b", fontSize: 15 }}>
@@ -52,6 +71,8 @@ export default function LecturerExamSchedulesPage() {
                 .les-table tr:hover td { background: #f8fafc; }
                 .les-search input { border: 1.5px solid #e2e8f0; border-radius: 9px; padding: 9px 14px; font-size: 14px; outline: none; transition: border-color 0.15s; }
                 .les-search input:focus { border-color: #3b82f6; }
+                .les-page-btn { border: none; border-radius: 9px; padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
+                .les-page-btn:disabled { opacity: 0.35; cursor: default; }
             `}</style>
 
             {/* HEADER */}
@@ -77,7 +98,6 @@ export default function LecturerExamSchedulesPage() {
                         style={{ width: 240 }}
                     />
                 </div>
-
                 <div style={{ display: "flex", gap: 6 }}>
                     {[
                         { v: "all",       label: "Tất cả" },
@@ -95,25 +115,33 @@ export default function LecturerExamSchedulesPage() {
                         >{opt.label}</button>
                     ))}
                 </div>
-
                 <span style={{ marginLeft: "auto", fontSize: 13, color: "#94a3b8" }}>
-                    {filtered.length} ca thi
+                    {totalCount} ca thi
                 </span>
             </div>
 
             {/* BẢNG */}
             <div className="les-card" style={{ overflow: "hidden" }}>
-                <div style={{ padding: "16px 20px", borderBottom: "1px solid #f1f5f9" }}>
+                <div style={{ padding: "16px 20px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0f172a" }}>
                         Danh sách lịch thi
                         <span style={{ marginLeft: 8, fontSize: 13, fontWeight: 500, color: "#94a3b8" }}>
-                            ({filtered.length})
+                            ({totalCount})
                         </span>
                     </h2>
+                    {totalPages > 1 && (
+                        <span style={{ fontSize: 13, color: "#64748b" }}>
+                            Trang {currentPage} / {totalPages}
+                        </span>
+                    )}
                 </div>
 
                 <div style={{ overflowX: "auto" }}>
-                    {filtered.length === 0 ? (
+                    {tableLoading ? (
+                        <div style={{ padding: 48, textAlign: "center", color: "#94a3b8", fontSize: 14 }}>
+                            Đang tải...
+                        </div>
+                    ) : examList.length === 0 ? (
                         <div style={{ padding: 48, textAlign: "center", color: "#94a3b8", fontSize: 14 }}>
                             Bạn chưa được phân công lịch thi nào.
                         </div>
@@ -131,9 +159,11 @@ export default function LecturerExamSchedulesPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {filtered.map((exam, i) => (
+                                {examList.map((exam, i) => (
                                     <tr key={exam.id || i}>
-                                        <td style={{ color: "#94a3b8", fontWeight: 500 }}>{i + 1}</td>
+                                        <td style={{ color: "#94a3b8", fontWeight: 500 }}>
+                                            {(currentPage - 1) * PAGE_SIZE + i + 1}
+                                        </td>
                                         <td>
                                             <div style={{ fontWeight: 600, fontSize: 14, color: "#1e293b" }}>
                                                 {exam.subject_name || "—"}
@@ -172,6 +202,44 @@ export default function LecturerExamSchedulesPage() {
                         </table>
                     )}
                 </div>
+
+                {/* PHÂN TRANG */}
+                {totalPages > 1 && (
+                    <div style={{
+                        padding: "14px 20px", borderTop: "1px solid #f1f5f9",
+                        display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                    }}>
+                        <button className="les-page-btn" style={{ background: "#f1f5f9", color: "#475569" }}
+                            disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>«</button>
+                        <button className="les-page-btn" style={{ background: "#f1f5f9", color: "#475569" }}
+                            disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>‹</button>
+
+                        {Array.from({ length: totalPages }, (_, i) => i + 1)
+                            .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                            .reduce((acc, p, idx, arr) => {
+                                if (idx > 0 && p - arr[idx - 1] > 1) acc.push("...");
+                                acc.push(p);
+                                return acc;
+                            }, [])
+                            .map((item, idx) => item === "..." ? (
+                                <span key={`e-${idx}`} style={{ padding: "6px 4px", color: "#94a3b8", fontSize: 13 }}>...</span>
+                            ) : (
+                                <button key={item} className="les-page-btn"
+                                    style={{
+                                        background: item === currentPage ? "#1e40af" : "#f1f5f9",
+                                        color: item === currentPage ? "white" : "#475569",
+                                    }}
+                                    onClick={() => setCurrentPage(item)}
+                                >{item}</button>
+                            ))
+                        }
+
+                        <button className="les-page-btn" style={{ background: "#f1f5f9", color: "#475569" }}
+                            disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}>›</button>
+                        <button className="les-page-btn" style={{ background: "#f1f5f9", color: "#475569" }}
+                            disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)}>»</button>
+                    </div>
+                )}
             </div>
         </div>
     );
