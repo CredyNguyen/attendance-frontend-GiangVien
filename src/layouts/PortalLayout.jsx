@@ -3,14 +3,14 @@ import { useAuth } from '../auth/AuthContext'
 
 const navMap = {
     student: [
-        { to: '/student/exam-schedules', label: 'Lich thi' },
-        { to: '/student/attendance-results', label: 'Ket qua diem danh' },
-        { to: '/student/face-registration', label: 'Dang ky khuon mat' },
+        { to: '/student/exam-schedules', label: 'Lịch thi' },
+        { to: '/student/attendance-results', label: 'Kết quả điểm danh' },
+        { to: '/student/face-registration', label: 'Đăng ký khuôn mặt' },
     ],
     lecturer: [
-        { to: '/lecturer/exam-schedules', label: 'Lich thi phu trach' },
-        { to: '/lecturer/today-exams', label: 'Lich thi hom nay' },
-        { to: '/lecturer/current-exam', label: 'Ca thi hien tai' },
+        { to: '/lecturer/exam-schedules', label: 'Lịch thi phụ trách' },
+        { to: '/lecturer/today-exams', label: 'Lịch thi hôm nay' },
+        { to: '/lecturer/current-exam', label: 'Ca thi hiện tại' },
     ],
 }
 
@@ -24,12 +24,12 @@ export default function PortalLayout() {
                 <div>
                     <p className="portal-kicker">Attendance Portal</p>
                     <h1>
-                        {user?.role === 'lecturer' ? 'Khong gian giang vien' : 'Khong gian sinh vien'}
+                        {user?.role === 'lecturer' ? 'Không gian giảng viên' : 'Không gian sinh viên'}
                     </h1>
                 </div>
                 <div className="profile-box">
                     <p>{user?.name || user?.full_name || user?.email || 'Unknown user'}</p>
-                    <button type="button" onClick={logout}>Dang xuat</button>
+                    <button type="button" onClick={logout}>Đăng xuất</button>
                 </div>
             </header>
 
