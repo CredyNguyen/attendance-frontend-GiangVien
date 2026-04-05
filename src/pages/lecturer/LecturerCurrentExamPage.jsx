@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
 import api from "../../api/client";
-import NoExamSession from "./NoExamSession";
 import "./LecturerCurrentExamPage.css";
 
 export default function LecturerCurrentExamPage() {
@@ -32,6 +31,15 @@ export default function LecturerCurrentExamPage() {
     const [currentPage, setCurrentPage] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
     const [tableLoading, setTableLoading] = useState(false);
+
+    // Sort
+    const [sortBy, setSortBy] = useState(null); // null | "full_name" | "class_code"
+    const [sortDir, setSortDir] = useState("asc"); // "asc" | "desc"
+
+    const handleSort = (col) => {
+        if (sortBy === col) setSortDir(d => d === "asc" ? "desc" : "asc");
+        else { setSortBy(col); setSortDir("asc"); }
+    };
 
     // camera khuôn mặt
     const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -66,7 +74,7 @@ export default function LecturerCurrentExamPage() {
                 setTotalCount(studentData.total ?? studentData.data.length);
             } catch (err) {
                 if (err.response?.status === 404) {
-                    // setExamData(null);
+                    setExamData(null);
                 } else {
                     setError("Lỗi kết nối server: " + (err.response?.status || err.message));
                 }
@@ -734,7 +742,14 @@ export default function LecturerCurrentExamPage() {
                     {/* ── DANH SÁCH SINH VIÊN ── */}
                     {(() => {
                         const totalPages = Math.ceil(totalCount / PAGE_SIZE);
-                        const paginated = students; // server đã phân trang sẵn
+                        const sortedStudents = sortBy
+                            ? [...students].sort((a, b) => {
+                                const va = (a[sortBy] || "").toLowerCase();
+                                const vb = (b[sortBy] || "").toLowerCase();
+                                return sortDir === "asc" ? va.localeCompare(vb, "vi") : vb.localeCompare(va, "vi");
+                              })
+                            : students;
+                        const paginated = sortedStudents; // server đã phân trang sẵn
                         return (
                             <div className="lce-card" style={{ overflow: "hidden" }}>
                                 <div style={{ padding: "16px 20px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -756,8 +771,12 @@ export default function LecturerCurrentExamPage() {
                                             <tr>
                                                 <th>STT</th>
                                                 <th>Mã SV</th>
-                                                <th>Họ tên</th>
-                                                <th>Lớp</th>
+                                                <th onClick={() => handleSort("full_name")} style={{ cursor: "pointer", userSelect: "none", color: sortBy === "full_name" ? "#1e40af" : undefined }}>
+                                                    Họ và tên {sortBy === "full_name" ? (sortDir === "asc" ? "▲" : "▼") : <span style={{opacity:0.35}}>▲</span>}
+                                                </th>
+                                                <th onClick={() => handleSort("class_code")} style={{ cursor: "pointer", userSelect: "none", color: sortBy === "class_code" ? "#1e40af" : undefined }}>
+                                                    Lớp {sortBy === "class_code" ? (sortDir === "asc" ? "▲" : "▼") : <span style={{opacity:0.35}}>▲</span>}
+                                                </th>
                                                 <th>Thời gian</th>
                                                 <th>Trạng thái</th>
                                             </tr>
@@ -859,7 +878,50 @@ export default function LecturerCurrentExamPage() {
                     })()}
                 </>
             ) : (
-                <NoExamSession />
+                <>
+                    <style>{`
+                        .lce-empty-card { background: white; border-radius: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
+                        .lce-empty-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+                        .lce-empty-table th { background: #f8fafc; color: #64748b; font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; padding: 11px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+                        .lce-empty-table td { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; color: #334155; vertical-align: middle; }
+                    `}</style>
+
+                    <div className="lce-empty-card" style={{ overflow: "hidden" }}>
+                        <div style={{ padding: "16px 20px", borderBottom: "1px solid #f1f5f9" }}>
+                            <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0f172a" }}>
+                                Danh sách sinh viên điểm danh
+                            </h2>
+                        </div>
+                        <div style={{ overflowX: "auto" }}>
+                            <table className="lce-empty-table">
+                                <thead>
+                                    <tr>
+                                        <th>STT</th>
+                                        <th>Mã SV</th>
+                                        <th>Họ và tên ▲</th>
+                                        <th>Lớp ▲</th>
+                                        <th>Thời gian điểm danh</th>
+                                        <th>Trạng thái</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td colSpan="6" style={{ textAlign: "center", padding: "48px 0" }}>
+                                            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                                                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="1.5">
+                                                    <circle cx="12" cy="12" r="10"/>
+                                                    <polyline points="12 6 12 12 16 14"/>
+                                                </svg>
+                                                <div style={{ fontSize: 15, fontWeight: 500, color: "#94a3b8" }}>Hiện tại không có ca thi đang diễn ra</div>
+                                                <div style={{ fontSize: 13, color: "#cbd5e1" }}>Vui lòng chờ ca thi bắt đầu</div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </>
             )}
         </div>
     );

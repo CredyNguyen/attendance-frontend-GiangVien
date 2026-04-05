@@ -33,7 +33,7 @@ export default function LoginPage() {
             const nextPath = location.state?.from?.pathname || fallbackPath
             navigate(nextPath, { replace: true })
         } catch (err) {
-            setError(err?.response?.data?.message || err.message || 'Dang nhap that bai')
+            setError(err?.response?.data?.message || err.message || 'Đăng nhập thất bại')
         } finally {
             setIsSubmitting(false)
         }
@@ -43,10 +43,8 @@ export default function LoginPage() {
         <div className="login-page">
             <div className="login-card">
                 <p className="portal-kicker">Attendance Portal</p>
-                <h1>Dang nhap he thong</h1>
-                <p>
-                    Su dung tai khoan backend de truy cap giao dien theo vai tro sinh vien hoac giang vien.
-                </p>
+                <h1>Đăng nhập hệ thống</h1>
+
 
                 <form onSubmit={handleSubmit} className="login-form">
                     <label htmlFor="email">Email</label>
@@ -59,7 +57,7 @@ export default function LoginPage() {
                         autoComplete="username"
                     />
 
-                    <label htmlFor="password">Mat khau</label>
+                    <label htmlFor="password">Mật khẩu</label>
                     <input
                         id="password"
                         type="password"
@@ -72,7 +70,7 @@ export default function LoginPage() {
                     {error ? <p className="error-note">{error}</p> : null}
 
                     <button type="submit" disabled={isSubmitting}>
-                        {isSubmitting ? 'Dang dang nhap...' : 'Dang nhap'}
+                        {isSubmitting ? 'Đang đăng nhập...' : 'Đăng nhập'}
                     </button>
                 </form>
             </div>
