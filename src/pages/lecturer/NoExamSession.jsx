@@ -174,16 +174,18 @@ export default function NoExamSession() {
                                 <tr>
                                     <th>STT</th>
                                     <th>Môn học</th>
+                                    <th>Mã ca thi</th>
                                     <th>Ngày thi</th>
                                     <th>Giờ thi</th>
                                     <th>Phòng</th>
-                                    <th>Trạng thái</th>
+                                    <th>Thời lượng</th>
+                                    <th>Ghi chú</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {tableLoading ? (
                                     <tr>
-                                        <td colSpan="6" style={{ textAlign: "center", color: "#94a3b8", padding: "32px 0" }}>
+                                        <td colSpan="8" style={{ textAlign: "center", color: "#94a3b8", padding: "32px 0" }}>
                                             Đang tải...
                                         </td>
                                     </tr>
@@ -204,8 +206,11 @@ export default function NoExamSession() {
                                                     </div>
                                                 )}
                                             </td>
+                                            <td style={{ color: "#64748b", fontWeight: 600 }}>
+                                                {exam.session_code || exam.id || "—"}
+                                            </td>
                                             <td style={{ color: "#64748b" }}>{exam.exam_date || exam.date || "—"}</td>
-                                            <td style={{ color: "#64748b" }}>{exam.exam_time || exam.session_name || exam.time_slot || "—"}</td>
+                                            <td style={{ color: "#64748b" }}>{exam.exam_time || exam.start_time || exam.start_at || "—"}</td>
                                             <td>
                                                 <span style={{
                                                     display: "inline-block",
@@ -216,15 +221,11 @@ export default function NoExamSession() {
                                                     {exam.room || exam.room_name || "—"}
                                                 </span>
                                             </td>
-                                            <td>
-                                                <span style={{
-                                                    display: "inline-block",
-                                                    borderRadius: 20, padding: "3px 12px",
-                                                    fontSize: 12, fontWeight: 600,
-                                                    background: st.bg, color: st.color,
-                                                }}>
-                                                    {st.label}
-                                                </span>
+                                            <td style={{ color: "#64748b" }}>
+                                                {exam.duration ? `${exam.duration} phút` : "—"}
+                                            </td>
+                                            <td style={{ color: "#64748b", fontSize: 13 }}>
+                                                {exam.note || exam.notes || exam.remark || "—"}
                                             </td>
                                         </tr>
                                     );

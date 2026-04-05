@@ -28,12 +28,6 @@ export default function LecturerExamSchedulesPage() {
         return matchSearch && matchStatus;
     });
 
-    const statusConfig = {
-        upcoming:  { label: "Sắp diễn ra",   bg: "#eff6ff", color: "#1d4ed8" },
-        ongoing:   { label: "Đang diễn ra",   bg: "#dcfce7", color: "#15803d" },
-        completed: { label: "Đã kết thúc",    bg: "#f1f5f9", color: "#64748b" },
-    };
-
     if (loading) return (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", color: "#64748b", fontSize: 15 }}>
             Đang tải dữ liệu...
@@ -60,7 +54,7 @@ export default function LecturerExamSchedulesPage() {
                 .les-search input:focus { border-color: #3b82f6; }
             `}</style>
 
-            {/* ── HEADER ── */}
+            {/* HEADER */}
             <div style={{ marginBottom: 24 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>
                     Lịch thi
@@ -73,7 +67,7 @@ export default function LecturerExamSchedulesPage() {
                 </p>
             </div>
 
-            {/* ── BỘ LỌC ── */}
+            {/* BỘ LỌC */}
             <div className="les-card" style={{ padding: "14px 18px", marginBottom: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                 <div className="les-search">
                     <input
@@ -107,7 +101,7 @@ export default function LecturerExamSchedulesPage() {
                 </span>
             </div>
 
-            {/* ── BẢNG ── */}
+            {/* BẢNG */}
             <div className="les-card" style={{ overflow: "hidden" }}>
                 <div style={{ padding: "16px 20px", borderBottom: "1px solid #f1f5f9" }}>
                     <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0f172a" }}>
@@ -129,61 +123,51 @@ export default function LecturerExamSchedulesPage() {
                                 <tr>
                                     <th>STT</th>
                                     <th>Môn học</th>
-                                    <th>Lớp</th>
+                                    <th>Mã ca thi</th>
                                     <th>Ngày thi</th>
-                                    <th>Ca thi</th>
+                                    <th>Thời lượng</th>
                                     <th>Phòng</th>
-                                    <th>Trạng thái</th>
+                                    <th>Ghi chú</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {filtered.map((exam, i) => {
-                                    const st = statusConfig[exam.status] || { label: exam.status || "—", bg: "#f1f5f9", color: "#64748b" };
-                                    return (
-                                        <tr key={exam.id || i}>
-                                            <td style={{ color: "#94a3b8", fontWeight: 500 }}>{i + 1}</td>
-                                            <td>
-                                                <div style={{ fontWeight: 600, fontSize: 14, color: "#1e293b" }}>
-                                                    {exam.subject_name || exam.course_name || "—"}
+                                {filtered.map((exam, i) => (
+                                    <tr key={exam.id || i}>
+                                        <td style={{ color: "#94a3b8", fontWeight: 500 }}>{i + 1}</td>
+                                        <td>
+                                            <div style={{ fontWeight: 600, fontSize: 14, color: "#1e293b" }}>
+                                                {exam.subject_name || "—"}
+                                            </div>
+                                            {exam.subject_code && (
+                                                <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>
+                                                    {exam.subject_code}
                                                 </div>
-                                                {exam.subject_code && (
-                                                    <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>
-                                                        {exam.subject_code}
-                                                    </div>
-                                                )}
-                                            </td>
-                                            <td style={{ color: "#64748b" }}>
-                                                {exam.class_name || exam.class_code || exam.group_name || "—"}
-                                            </td>
-                                            <td style={{ color: "#64748b" }}>
-                                                {exam.exam_date || exam.date || exam.start_at || "—"}
-                                            </td>
-                                            <td style={{ color: "#64748b" }}>
-                                                {exam.session_name || exam.session || exam.time_slot || "—"}
-                                            </td>
-                                            <td>
-                                                <span style={{
-                                                    display: "inline-block",
-                                                    background: "#e0e7ff", color: "#3730a3",
-                                                    borderRadius: 8, padding: "3px 10px",
-                                                    fontSize: 13, fontWeight: 600,
-                                                }}>
-                                                    {exam.room || exam.room_name || exam.location || "—"}
-                                                </span>
-                                            </td>
-                                            <td>
-                                                <span style={{
-                                                    display: "inline-block",
-                                                    borderRadius: 20, padding: "3px 12px",
-                                                    fontSize: 12, fontWeight: 600,
-                                                    background: st.bg, color: st.color,
-                                                }}>
-                                                    {st.label}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
+                                            )}
+                                        </td>
+                                        <td style={{ color: "#1e40af", fontWeight: 700 }}>
+                                            {exam.id || "—"}
+                                        </td>
+                                        <td style={{ color: "#64748b" }}>
+                                            {exam.exam_date || "—"}
+                                        </td>
+                                        <td style={{ color: "#64748b" }}>
+                                            {exam.duration ? `${exam.duration} phút` : "—"}
+                                        </td>
+                                        <td>
+                                            <span style={{
+                                                display: "inline-block",
+                                                background: "#e0e7ff", color: "#3730a3",
+                                                borderRadius: 8, padding: "3px 10px",
+                                                fontSize: 13, fontWeight: 600,
+                                            }}>
+                                                {exam.room || "—"}
+                                            </span>
+                                        </td>
+                                        <td style={{ color: "#64748b", fontSize: 13 }}>
+                                            {exam.note || "—"}
+                                        </td>
+                                    </tr>
+                                ))}
                             </tbody>
                         </table>
                     )}
