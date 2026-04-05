@@ -9,7 +9,6 @@ const navMap = {
     ],
     lecturer: [
         { to: '/lecturer/exam-schedules', label: 'Lịch thi phụ trách' },
-        { to: '/lecturer/today-exams', label: 'Lịch thi hôm nay' },
         { to: '/lecturer/current-exam', label: 'Ca thi hiện tại' },
     ],
 }
