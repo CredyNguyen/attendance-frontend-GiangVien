@@ -4,6 +4,7 @@ import PortalLayout from './layouts/PortalLayout'
 import LoginPage from './pages/LoginPage'
 import LecturerCurrentExamPage from './pages/lecturer/LecturerCurrentExamPage'
 import LecturerExamSchedulesPage from './pages/lecturer/LecturerExamSchedulesPage'
+import LecturerProfilePage from './pages/lecturer/LecturerProfilePage'
 import StudentAttendanceResultsPage from './pages/student/StudentAttendanceResultsPage'
 import StudentExamSchedulesPage from './pages/student/StudentExamSchedulesPage'
 import StudentFaceRegistrationPage from './pages/student/StudentFaceRegistrationPage'
@@ -61,6 +62,7 @@ function AppRoutes() {
       >
         <Route path="exam-schedules" element={<LecturerExamSchedulesPage />} />
         <Route path="current-exam" element={<LecturerCurrentExamPage />} />
+        <Route path="profile" element={<LecturerProfilePage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
