@@ -43,7 +43,7 @@ export default function LecturerCurrentExamPage() {
     // "user" = camera trước
     // "environment" = camera sau
     const [faceAttendanceStatus, setFaceAttendanceStatus] = useState({ type: "", message: "" });
-
+    const [isVerifying, setIsVerifying] = useState(false);
 
     // QR scanner
     const [isQrOpen, setIsQrOpen] = useState(false);
@@ -157,74 +157,18 @@ export default function LecturerCurrentExamPage() {
         try {
             setFaceError("");
             setIsFaceDetected(false);
-
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode,
-                    width: 640,
-                    height: 480
-                }
+                video: { facingMode, width: 640, height: 480 }
             });
-
             streamRef.current = stream;
-
-            const video = videoRef.current;
-            if (!video) return;
-
-            video.srcObject = stream;
-
-            video.onloadedmetadata = async () => {
-                await video.play();
-
-                const scanFace = async () => {
-                    if (!videoRef.current || !canvasRef.current) return;
-
-                    const canvas = canvasRef.current;
-
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-
-                    const detections = await faceapi.detectAllFaces(
-                        video,
-                        new faceapi.TinyFaceDetectorOptions()
-                    );
-
-                    const ctx = canvas.getContext("2d");
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                    if (detections.length > 0) {
-                        setIsFaceDetected(true);
-                        setFaceError("");
-
-                        const resizedDetections = faceapi.resizeResults(
-                            detections,
-                            {
-                                width: video.videoWidth,
-                                height: video.videoHeight
-                            }
-                        );
-
-                        faceapi.draw.drawDetections(
-                            canvas,
-                            resizedDetections
-                        );
-                    } else {
-                        setIsFaceDetected(false);
-                        setFaceError(
-                            "Không nhận diện được khuôn mặt"
-                        );
-                    }
-
-                    faceIntervalRef.current = setTimeout(scanFace, 300);
+            if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+                videoRef.current.onloadedmetadata = () => {
+                    videoRef.current.play();
+                    startFaceDetection();
                 };
-
-                startFaceDetection();
-            };
-        } catch (err) {
-            console.error(err);
-            showToast("error", "Không mở được camera");
-
-        }
+            }
+        } catch (err) { console.error(err); }
     };
 
     const handleFaceAttendance = async () => {
@@ -257,67 +201,45 @@ export default function LecturerCurrentExamPage() {
     const closeCamera = () => {
         setIsCameraOpen(false);
         setCapturedImage(null);
-        setFaceAttendanceStatus({ type: "", message: "" }); // Reset thông báo khi đóng
+        setFaceAttendanceStatus({ type: "", message: "" });
         stopStream(streamRef.current);
-        if (faceIntervalRef.current) {
-            clearTimeout(faceIntervalRef.current);
-        }
+        if (faceIntervalRef.current) clearTimeout(faceIntervalRef.current);
     };
     const handleCapture = () => {
-        if (!isFaceDetected) {
-            setFaceError("Không nhận diện được khuôn mặt, vui lòng căn chỉnh và thử lại");
-            return;
-        }
+        if (!isFaceDetected) return;
         const video = videoRef.current;
         const canvas = document.createElement("canvas");
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         canvas.getContext("2d").drawImage(video, 0, 0);
-
         setCapturedImage(canvas.toDataURL("image/jpeg"));
-        setFaceAttendanceStatus({ type: "", message: "" }); // Xóa thông báo cũ khi chụp người mới
+        setFaceAttendanceStatus({ type: "", message: "" });
     };
     const startFaceDetection = () => {
-        const video = videoRef.current;
-        const canvas = canvasRef.current;
-
-        if (!video || !canvas) return;
-
         const scanFace = async () => {
-            if (!videoRef.current || !canvasRef.current) return;
+            // Không quét khi đã có ảnh chụp hoặc đang Verify
+            if (!videoRef.current || !canvasRef.current || capturedImage || isVerifying) return;
 
-            const videoWidth = video.videoWidth;
-            const videoHeight = video.videoHeight;
+            const video = videoRef.current;
+            const canvas = canvasRef.current;
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
 
-            canvas.width = videoWidth;
-            canvas.height = videoHeight;
-
-            const detections = await faceapi.detectAllFaces(
-                video,
-                new faceapi.TinyFaceDetectorOptions()
-            );
-
+            const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions());
             const ctx = canvas.getContext("2d");
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             if (detections.length > 0) {
                 setIsFaceDetected(true);
                 setFaceError("");
-
-                const resizedDetections = faceapi.resizeResults(detections, {
-                    width: videoWidth,
-                    height: videoHeight
-                });
-
-                faceapi.draw.drawDetections(canvas, resizedDetections);
+                const resized = faceapi.resizeResults(detections, { width: video.videoWidth, height: video.videoHeight });
+                faceapi.draw.drawDetections(canvas, resized);
             } else {
                 setIsFaceDetected(false);
                 setFaceError("Không nhận diện được khuôn mặt");
             }
-
             faceIntervalRef.current = setTimeout(scanFace, 300);
         };
-
         scanFace();
     };
     const handleRetake = () => {
@@ -331,25 +253,20 @@ export default function LecturerCurrentExamPage() {
     const refreshCameraStream = () => {
         if (videoRef.current && streamRef.current) {
             videoRef.current.srcObject = streamRef.current;
-            videoRef.current.play().catch(err => console.error("Camera play error:", err));
+            videoRef.current.play().catch(() => { });
         }
     };
     const handleVerify = async () => {
+        if (!capturedImage) return;
+        setIsVerifying(true);
         try {
-            if (!capturedImage) return;
-            setLoading(true);
             const res = await api.post("/lecturer/attendance/face-recognition", {
                 image: capturedImage,
                 exam_schedule_id: examData.id
             });
 
-            const backendMsg = res.data.message;
-
             if (res.data.success) {
-                // 1. Hiện thông báo thành công
-                setFaceAttendanceStatus({ type: "success", message: backendMsg });
-
-                // 2. Cập nhật danh sách sinh viên bên dưới
+                setFaceAttendanceStatus({ type: "success", message: res.data.message });
                 const student = res.data.data.student;
                 const updated = students.map(sv =>
                     sv.student_code === student.student_code
@@ -358,24 +275,15 @@ export default function LecturerCurrentExamPage() {
                 );
                 setStudents(updated);
                 setFilteredStudents(updated);
-
-          
-
             } else {
-                setFaceAttendanceStatus({ type: "error", message: backendMsg });
-               
+                setFaceAttendanceStatus({ type: "error", message: res.data.message });
             }
         } catch (err) {
-            const errorDetail = err.response?.data?.message || "Lỗi hệ thống khi nhận diện";
-            setFaceAttendanceStatus({ type: "error", message: errorDetail });
+            setFaceAttendanceStatus({ type: "error", message: err.response?.data?.message || "Lỗi xác thực" });
         } finally {
-
-            setTimeout(() => {
-                setCapturedImage(null);
-                refreshCameraStream();
-                // Lưu ý: Không xóa faceAttendanceStatus ở đây để giảng viên vẫn thấy tên người vừa xong
-            }, 1000);
-            setLoading(false);
+            setIsVerifying(false);
+            setCapturedImage(null); // Quay về camera ngay lập tức
+            requestAnimationFrame(() => refreshCameraStream());
         }
     };
     // ─── QR SCANNER ─────────────────────────────────────────────
@@ -560,17 +468,11 @@ export default function LecturerCurrentExamPage() {
         startQrScan();
     };
 
-    // ─── RENDER ──────────────────────────────────────────────────
-    if (loading) return (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", color: "#64748b", fontSize: 15 }}>
-            Đang tải dữ liệu...
-        </div>
-    );
-    if (error) return (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", color: "#dc2626", fontSize: 15 }}>
-            {error}
-        </div>
-    );
+    // --- SỬA TẠI ĐÂY: KHÔNG RETURN GIAO DIỆN LOADING TRỐNG ---
+    // Chỉ return null khi thực sự không có examData và đã load xong
+    if (!loading && !examData && !error) {
+        return <div style={{ padding: 20 }}>Không có ca thi diễn ra hiện tại.</div>
+    }
 
     const attendanceRate = examData?.attendance_rate ?? 0;
 
@@ -649,7 +551,7 @@ export default function LecturerCurrentExamPage() {
 
                     {/* ── ACTIONS ── */}
                     <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
-                        <button className="lce-btn lce-btn-primary" onClick={handleFaceAttendance}>
+                        <button className="lce-btn lce-btn-primary" onClick={() => { setIsCameraOpen(true); setTimeout(() => startCamera(), 100); }}>
                             Điểm danh khuôn mặt
                         </button>
                         <button className="lce-btn lce-btn-secondary" onClick={handleQrAttendance}>
@@ -659,21 +561,15 @@ export default function LecturerCurrentExamPage() {
 
                     {/* ── CAMERA KHUÔN MẶT ── */}
                     {isCameraOpen && (
-                        <div style={{
-                            position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)",
-                            zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center",
-                        }}>
+                        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center" }}>
                             <div className="lce-card" style={{ width: "min(440px,94vw)", overflow: "hidden", background: "#fff" }}>
-                                <div style={{
-                                    background: "linear-gradient(135deg,#1e40af,#3b82f6)",
-                                    padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between"
-                                }}>
-                                    <span style={{ color: "white", fontWeight: 700 }}>Điểm danh khuôn mặt</span>
-                                    <button className="lce-btn" onClick={closeCamera} style={{ background: "rgba(255,255,255,0.2)", color: "white", padding: "5px 14px", fontSize: 13 }}>Đóng</button>
+                                <div style={{ background: "linear-gradient(135deg,#1e40af,#3b82f6)", padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", color: "#fff" }}>
+                                    <span style={{ fontWeight: 700 }}>Điểm danh khuôn mặt</span>
+                                    <button onClick={closeCamera} style={{ background: "rgba(255,255,255,0.2)", color: "white", padding: "5px 14px", fontSize: 13, border: "none", borderRadius: "6px", cursor: "pointer" }}>Đóng</button>
                                 </div>
 
-                                <div style={{ position: "relative", width: "100%", height: 280, background: "#000" }}>
-                                    {/* VIDEO: Dùng opacity để không bị đen màn hình */}
+                                <div style={{ position: "relative", width: "100%", height: 320, background: "#000" }}>
+                                    {/* VIDEO VÀ CANVAS LUÔN HIỆN ĐỂ GIỮ KHUNG XANH VÀ STREAM */}
                                     <video
                                         ref={videoRef}
                                         autoPlay
@@ -681,6 +577,7 @@ export default function LecturerCurrentExamPage() {
                                         muted
                                         style={{
                                             width: "100%", height: "100%", objectFit: "cover",
+                                            position: "absolute", zIndex: 1,
                                             opacity: capturedImage ? 0 : 1
                                         }}
                                     />
@@ -688,15 +585,17 @@ export default function LecturerCurrentExamPage() {
                                         ref={canvasRef}
                                         style={{
                                             position: "absolute", inset: 0, width: "100%", height: "100%",
-                                            pointerEvents: "none", opacity: capturedImage ? 0 : 1
+                                            objectFit: "cover", zIndex: 2, pointerEvents: "none",
+                                            opacity: capturedImage ? 0 : 1
                                         }}
                                     />
 
+                                    {/* ẢNH CHỤP ĐÈ LÊN TRÊN */}
                                     {capturedImage && (
-                                        <img src={capturedImage} alt="preview" style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover", zIndex: 10 }} />
+                                        <img src={capturedImage} alt="preview" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", zIndex: 10 }} />
                                     )}
 
-                                    {loading && (
+                                    {isVerifying && (
                                         <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 20, display: "flex", alignItems: "center", justifyContent: "center", color: "white" }}>
                                             Đang xác thực...
                                         </div>
@@ -704,11 +603,10 @@ export default function LecturerCurrentExamPage() {
                                 </div>
 
                                 <div style={{ padding: "14px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
-
-                                    {/* THÔNG BÁO DƯỚI CAMERA */}
+                                    {/* KHU VỰC THÔNG BÁO */}
                                     {faceAttendanceStatus.message && (
                                         <div style={{
-                                            padding: "12px", borderRadius: "8px", textAlign: "center", fontSize: "14px", fontWeight: "600",
+                                            padding: "10px", borderRadius: "8px", textAlign: "center", fontSize: "14px", fontWeight: "600",
                                             backgroundColor: faceAttendanceStatus.type === "success" ? "#dcfce7" : "#fee2e2",
                                             color: faceAttendanceStatus.type === "success" ? "#15803d" : "#dc2626",
                                             border: `1px solid ${faceAttendanceStatus.type === "success" ? "#86efac" : "#fecaca"}`
@@ -717,26 +615,17 @@ export default function LecturerCurrentExamPage() {
                                         </div>
                                     )}
 
-                                    {faceError && !faceAttendanceStatus.message && (
-                                        <div style={{ color: "red", fontSize: 14, fontWeight: 600, textAlign: "center" }}>{faceError}</div>
-                                    )}
-
-                                    <div style={{ display: "flex", justifyContent: "center", gap: 10, flexWrap: "wrap" }}>
+                                    <div style={{ display: "flex", justifyContent: "center", gap: 10 }}>
                                         {!capturedImage ? (
                                             <>
+                                                {/* NÚT ĐỔI CAMERA ĐÂY RỒI */}
                                                 <button className="lce-btn lce-btn-ghost" onClick={handleSwitchCamera}>Đổi camera</button>
                                                 <button className="lce-btn lce-btn-primary" onClick={handleCapture}>Chụp hình</button>
                                             </>
                                         ) : (
                                             <>
-                                                <button className="lce-btn lce-btn-ghost" onClick={() => { setCapturedImage(null); refreshCameraStream(); }} disabled={loading}>Hủy</button>
-                                                <button
-                                                    className="lce-btn lce-btn-secondary"
-                                                    onClick={handleVerify}
-                                                    disabled={loading}
-                                                >
-                                                    {loading ? "Đang xử lý..." : "Xác nhận điểm danh"}
-                                                </button>
+                                                <button className="lce-btn lce-btn-ghost" onClick={() => { setCapturedImage(null); refreshCameraStream(); }} disabled={isVerifying}>Hủy</button>
+                                                <button className="lce-btn lce-btn-secondary" style={{ background: "#059669", color: "#fff" }} onClick={handleVerify} disabled={isVerifying}>Xác nhận</button>
                                             </>
                                         )}
                                     </div>
