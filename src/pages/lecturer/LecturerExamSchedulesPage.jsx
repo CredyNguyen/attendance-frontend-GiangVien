@@ -46,7 +46,9 @@ export default function LecturerExamSchedulesPage() {
                     return (a.exam_date || "").localeCompare(b.exam_date || "");
                 });
 
-                setExamList(sorted);
+                const filteredData = sorted.filter(e => e.status !== "completed");
+
+                setExamList(filteredData);
             } catch {
                 setError("Lỗi khi tải dữ liệu lịch thi");
             } finally {
@@ -57,12 +59,18 @@ export default function LecturerExamSchedulesPage() {
     }, []);
 
     const filtered = examList.filter(exam => {
+        // ❌ bỏ luôn ca đã kết thúc
+        if (exam.status === "completed") return false;
+
         const q = search.toLowerCase();
         const matchSearch =
             (exam.subject_name || "").toLowerCase().includes(q) ||
             (exam.room || "").toLowerCase().includes(q) ||
             (exam.subject_code || "").toLowerCase().includes(q);
-        const matchStatus = filterStatus === "all" || exam.status === filterStatus;
+
+        const matchStatus =
+            filterStatus === "all" || exam.status === filterStatus;
+
         return matchSearch && matchStatus;
     });
 
@@ -126,10 +134,10 @@ export default function LecturerExamSchedulesPage() {
                         display: "flex", alignItems: "center", justifyContent: "center",
                     }}>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#92400e" strokeWidth="2.2">
-                            <rect x="3" y="4" width="18" height="18" rx="2"/>
-                            <line x1="16" y1="2" x2="16" y2="6"/>
-                            <line x1="8" y1="2" x2="8" y2="6"/>
-                            <line x1="3" y1="10" x2="21" y2="10"/>
+                            <rect x="3" y="4" width="18" height="18" rx="2" />
+                            <line x1="16" y1="2" x2="16" y2="6" />
+                            <line x1="8" y1="2" x2="8" y2="6" />
+                            <line x1="3" y1="10" x2="21" y2="10" />
                         </svg>
                     </div>
                     <div>
@@ -155,9 +163,8 @@ export default function LecturerExamSchedulesPage() {
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
                     {[
-                        { v: "all",       label: "Tất cả" },
-                        { v: "upcoming",  label: "Sắp diễn ra" },
-                        { v: "completed", label: "Đã kết thúc" },
+                        { v: "all", label: "Tất cả" },
+                        { v: "upcoming", label: "Sắp diễn ra" },
                     ].map(opt => (
                         <button
                             key={opt.v}

@@ -1,6 +1,6 @@
+import * as faceapi from "face-api.js";
 import React, { useEffect, useState, useRef } from "react";
 import api from "../../api/client";
-import "./LecturerCurrentExamPage.css";
 
 export default function LecturerCurrentExamPage() {
     const [examData, setExamData] = useState(null);
@@ -20,7 +20,9 @@ export default function LecturerCurrentExamPage() {
     const [filteredStudents, setFilteredStudents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-
+    const [toast, setToast] = useState(null);
+    // { type: "success" | "error", message: "" }
+    const toastTimerRef = useRef(null);
     // Tra cứu sinh viên
     const [lookupCode, setLookupCode] = useState("");
     const [lookupResult, setLookupResult] = useState(null);  // null | { status, data } | { status: "error", msg }
@@ -47,6 +49,12 @@ export default function LecturerCurrentExamPage() {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const streamRef = useRef(null);
+    const [faceError, setFaceError] = useState("");
+    const [isFaceDetected, setIsFaceDetected] = useState(false);
+    const [cameraFacingMode, setCameraFacingMode] = useState("user");
+    // "user" = camera trước
+    // "environment" = camera sau
+
 
     // QR scanner
     const [isQrOpen, setIsQrOpen] = useState(false);
@@ -84,7 +92,24 @@ export default function LecturerCurrentExamPage() {
         };
         fetchExam();
     }, []);
+    useEffect(() => {
+        const loadModels = async () => {
+            try {
+                const MODEL_URL =
+                    "/models/face-api.js-models-master/tiny_face_detector";
 
+                console.log("Loading model from:", MODEL_URL);
+
+                await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+
+                console.log("Face model loaded");
+            } catch (err) {
+                console.error("Load model failed:", err);
+            }
+        };
+
+        loadModels();
+    }, []);
     // Fetch danh sách sinh viên khi đổi trang
     useEffect(() => {
         if (currentPage === 1) return; // trang 1 đã fetch ở trên
@@ -124,46 +149,214 @@ export default function LecturerCurrentExamPage() {
     };
 
     // ─── CAMERA KHUÔN MẶT ───────────────────────────────────────
-    const handleFaceAttendance = async () => {
+    const faceIntervalRef = useRef(null);
+    const showToast = (type, message) => {
+        setToast({ type, message });
+
+        clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = setTimeout(() => {
+            setToast(null);
+        }, 2500);
+    };
+    const stopStream = (stream) => {
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+        }
+    };
+
+    const startCamera = async (facingMode = cameraFacingMode) => {
         try {
-            setIsCameraOpen(true);
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+            setFaceError("");
+            setIsFaceDetected(false);
+
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode,
+                    width: 640,
+                    height: 480
+                }
+            });
+
             streamRef.current = stream;
-            videoRef.current.srcObject = stream;
-            videoRef.current.play();
+
+            const video = videoRef.current;
+            if (!video) return;
+
+            video.srcObject = stream;
+
+            video.onloadedmetadata = async () => {
+                await video.play();
+
+                const scanFace = async () => {
+                    if (!videoRef.current || !canvasRef.current) return;
+
+                    const canvas = canvasRef.current;
+
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+
+                    const detections = await faceapi.detectAllFaces(
+                        video,
+                        new faceapi.TinyFaceDetectorOptions()
+                    );
+
+                    const ctx = canvas.getContext("2d");
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    if (detections.length > 0) {
+                        setIsFaceDetected(true);
+                        setFaceError("");
+
+                        const resizedDetections = faceapi.resizeResults(
+                            detections,
+                            {
+                                width: video.videoWidth,
+                                height: video.videoHeight
+                            }
+                        );
+
+                        faceapi.draw.drawDetections(
+                            canvas,
+                            resizedDetections
+                        );
+                    } else {
+                        setIsFaceDetected(false);
+                        setFaceError(
+                            "Không nhận diện được khuôn mặt"
+                        );
+                    }
+
+                    faceIntervalRef.current = setTimeout(scanFace, 300);
+                };
+
+                startFaceDetection();
+            };
         } catch (err) {
             console.error(err);
-            alert("Không mở được camera");
+            showToast("error", "Không mở được camera");
+
         }
+    };
+
+    const handleFaceAttendance = async () => {
+        setCapturedImage(null);
+        setIsCameraOpen(true);
+
+        setTimeout(() => {
+            startCamera();
+        }, 100);
+    };
+    const handleSwitchCamera = async () => {
+        const newMode =
+            cameraFacingMode === "user"
+                ? "environment"
+                : "user";
+
+        setCameraFacingMode(newMode);
+
+        stopStream(streamRef.current);
+
+        if (faceIntervalRef.current) {
+            clearTimeout(faceIntervalRef.current);
+        }
+
+        setTimeout(() => {
+            startCamera(newMode);
+        }, 100);
     };
 
     const closeCamera = () => {
         setIsCameraOpen(false);
         setCapturedImage(null);
-        if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
-    };
 
+        stopStream(streamRef.current);
+
+        if (faceIntervalRef.current) {
+            clearTimeout(faceIntervalRef.current);
+        }
+    };
     const handleCapture = () => {
-        const canvas = canvasRef.current;
+        if (!isFaceDetected) {
+            setFaceError(
+                "Không nhận diện được khuôn mặt, vui lòng căn chỉnh và thử lại"
+            );
+            return;
+        }
+
         const video = videoRef.current;
-        canvas.getContext("2d").drawImage(video, 0, 0, 640, 480);
+        const canvas = document.createElement("canvas");
+
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(video, 0, 0);
+
         setCapturedImage(canvas.toDataURL("image/jpeg"));
     };
+    const startFaceDetection = () => {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
 
-    const handleRetake = () => setCapturedImage(null);
+        if (!video || !canvas) return;
+
+        const scanFace = async () => {
+            if (!videoRef.current || !canvasRef.current) return;
+
+            const videoWidth = video.videoWidth;
+            const videoHeight = video.videoHeight;
+
+            canvas.width = videoWidth;
+            canvas.height = videoHeight;
+
+            const detections = await faceapi.detectAllFaces(
+                video,
+                new faceapi.TinyFaceDetectorOptions()
+            );
+
+            const ctx = canvas.getContext("2d");
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (detections.length > 0) {
+                setIsFaceDetected(true);
+                setFaceError("");
+
+                const resizedDetections = faceapi.resizeResults(detections, {
+                    width: videoWidth,
+                    height: videoHeight
+                });
+
+                faceapi.draw.drawDetections(canvas, resizedDetections);
+            } else {
+                setIsFaceDetected(false);
+                setFaceError("Không nhận diện được khuôn mặt");
+            }
+
+            faceIntervalRef.current = setTimeout(scanFace, 300);
+        };
+
+        scanFace();
+    };
+    const handleRetake = () => {
+        setCapturedImage(null);
+
+        setTimeout(() => {
+            startCamera(cameraFacingMode);
+        }, 100);
+    };
 
     const handleVerify = async () => {
         try {
-            if (!capturedImage) { alert("Vui lòng chụp ảnh trước"); return; }
+            if (!capturedImage) { showToast("error", "Vui lòng chụp ảnh trước"); return; }
             const res = await api.post("/lecturer/attendance/face-recognition", {
                 image: capturedImage,
                 exam_schedule_id: examData.id
             });
-            if (!res.data.success) { alert(res.data.message || "Không nhận diện được"); return; }
+            if (!res.data.success) { showToast("error", res.data.message || "Không nhận diện được"); return; }
             const attendance = res.data.data.attendance;
             const student = res.data.data.student;
             await api.patch(`/lecturer/attendance-records/${attendance.id}`);
-            alert("Điểm danh thành công");
+            showToast("success", "Điểm danh thành công");
             const updated = students.map(sv =>
                 sv.student_code === student.student_code
                     ? { ...sv, rekognition_result: "match", attendance_time: attendance.attendance_time }
@@ -174,7 +367,8 @@ export default function LecturerCurrentExamPage() {
             closeCamera();
         } catch (err) {
             console.error(err);
-            alert("Lỗi khi nhận diện khuôn mặt");
+
+            showToast("error", "Lỗi khi nhận diện khuôn mặt");
         }
     };
 
@@ -203,7 +397,7 @@ export default function LecturerCurrentExamPage() {
                 }
             }, 300);
         } catch (err) {
-            alert("Không mở được camera: " + err.message);
+            showToast("error", "Không mở được camera: " + err.message);
             setIsQrOpen(false);
         }
     };
@@ -227,7 +421,7 @@ export default function LecturerCurrentExamPage() {
 
     const startQrScan = () => {
         if (qrVideoRef.current && qrVideoRef.current.paused) {
-            qrVideoRef.current.play().catch(() => {});
+            qrVideoRef.current.play().catch(() => { });
         }
 
         clearInterval(qrIntervalRef.current);
@@ -268,7 +462,7 @@ export default function LecturerCurrentExamPage() {
                 }
             } catch {
                 clearInterval(qrIntervalRef.current);
-                alert("Thiếu thư viện jsqr. Chạy: npm install jsqr");
+                showToast("error", "Thiếu thư viện jsqr. Chạy: npm install jsqr");
             }
         }, 200);
     };
@@ -462,28 +656,165 @@ export default function LecturerCurrentExamPage() {
                             position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)",
                             zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center",
                         }}>
-                            <div className="lce-card" style={{ width: "min(440px,94vw)", overflow: "hidden" }}>
-                                <div style={{ background: "linear-gradient(135deg,#1e40af,#3b82f6)", padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                                    <span style={{ color: "white", fontWeight: 700, fontSize: 15 }}>Điểm danh khuôn mặt</span>
-                                    <button className="lce-btn" onClick={closeCamera} style={{ background: "rgba(255,255,255,0.2)", color: "white", padding: "5px 14px", fontSize: 13 }}>Đóng</button>
+                            <div
+                                className="lce-card"
+                                style={{ width: "min(440px,94vw)", overflow: "hidden" }}
+                            >
+                                <div
+                                    style={{
+                                        background: "linear-gradient(135deg,#1e40af,#3b82f6)",
+                                        padding: "16px 20px",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "space-between"
+                                    }}
+                                >
+                                    <span
+                                        style={{
+                                            color: "white",
+                                            fontWeight: 700,
+                                            fontSize: 15
+                                        }}
+                                    >
+                                        Điểm danh khuôn mặt
+                                    </span>
+
+                                    <button
+                                        className="lce-btn"
+                                        onClick={closeCamera}
+                                        style={{
+                                            background: "rgba(255,255,255,0.2)",
+                                            color: "white",
+                                            padding: "5px 14px",
+                                            fontSize: 13
+                                        }}
+                                    >
+                                        Đóng
+                                    </button>
                                 </div>
-                                <div style={{ padding: 20 }}>
-                                    <div style={{ borderRadius: 10, overflow: "hidden", background: "#000", marginBottom: 14 }}>
-                                        <video ref={videoRef} autoPlay width="400"
-                                            style={{ width: "100%", display: capturedImage ? "none" : "block", maxHeight: 280, objectFit: "cover" }} />
-                                        {capturedImage && <img src={capturedImage} alt="preview" style={{ width: "100%", maxHeight: 280, objectFit: "cover", display: "block" }} />}
-                                    </div>
-                                    <canvas ref={canvasRef} width={640} height={480} style={{ display: "none" }} />
-                                    <div style={{ display: "flex", gap: 10 }}>
-                                        {!capturedImage && <button className="lce-btn lce-btn-primary" style={{ flex: 1 }} onClick={handleCapture}>Chụp ảnh</button>}
-                                        {capturedImage && <>
-                                            <button className="lce-btn lce-btn-ghost" style={{ flex: 1 }} onClick={handleRetake}>Chụp lại</button>
-                                            <button className="lce-btn lce-btn-primary" style={{ flex: 1 }} onClick={handleVerify}>Xác nhận</button>
-                                        </>}
+
+                                <div
+                                    style={{
+                                        position: "relative",
+                                        width: "100%",
+                                        height: 280,
+                                        borderRadius: 10,
+                                        overflow: "hidden",
+                                        marginBottom: 14
+                                    }}
+                                >
+                                    {/* VIDEO luôn tồn tại */}
+                                    <video
+                                        ref={videoRef}
+                                        autoPlay
+                                        playsInline
+                                        muted
+                                        style={{
+                                            width: "100%",
+                                            height: 280,
+                                            objectFit: "cover",
+                                            display: capturedImage ? "none" : "block"
+                                        }}
+                                    />
+
+                                    {/* Canvas nhận diện mặt */}
+                                    <canvas
+                                        ref={canvasRef}
+                                        style={{
+                                            position: "absolute",
+                                            inset: 0,
+                                            width: "100%",
+                                            height: "100%",
+                                            pointerEvents: "none",
+                                            display: capturedImage ? "none" : "block"
+                                        }}
+                                    />
+
+                                    {/* Ảnh preview khi chụp */}
+                                    {capturedImage && (
+                                        <img
+                                            src={capturedImage}
+                                            alt="preview"
+                                            style={{
+                                                position: "absolute",
+                                                top: 0,
+                                                left: 0,
+                                                width: "100%",
+                                                height: "100%",
+                                                objectFit: "cover",
+                                                zIndex: 10
+                                            }}
+                                        />
+                                    )}
+                                </div>
+
+                                <div
+                                    style={{
+                                        padding: "14px 20px",
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        gap: 12
+                                    }}
+                                >
+                                    {faceError && (
+                                        <div
+                                            style={{
+                                                color: "red",
+                                                fontSize: 14,
+                                                fontWeight: 600,
+                                                textAlign: "center"
+                                            }}
+                                        >
+                                            {faceError}
+                                        </div>
+                                    )}
+
+                                    <div
+                                        style={{
+                                            display: "flex",
+                                            justifyContent: "center",
+                                            gap: 10,
+                                            flexWrap: "wrap"
+                                        }}
+                                    >
+                                        {!capturedImage ? (
+                                            <>
+                                                <button
+                                                    className="lce-btn lce-btn-ghost"
+                                                    onClick={handleSwitchCamera}
+                                                >
+                                                    Đổi camera
+                                                </button>
+
+                                                <button
+                                                    className="lce-btn lce-btn-primary"
+                                                    onClick={handleCapture}
+                                                >
+                                                    Chụp hình
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <button
+                                                    className="lce-btn lce-btn-ghost"
+                                                    onClick={handleRetake}
+                                                >
+                                                    Chụp lại
+                                                </button>
+
+                                                <button
+                                                    className="lce-btn lce-btn-secondary"
+                                                    onClick={handleVerify}
+                                                >
+                                                    Xác nhận điểm danh
+                                                </button>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
                             </div>
                         </div>
+
                     )}
 
                     {/* ── QR SCANNER MODAL ── */}
@@ -747,7 +1078,7 @@ export default function LecturerCurrentExamPage() {
                                 const va = (a[sortBy] || "").toLowerCase();
                                 const vb = (b[sortBy] || "").toLowerCase();
                                 return sortDir === "asc" ? va.localeCompare(vb, "vi") : vb.localeCompare(va, "vi");
-                              })
+                            })
                             : students;
                         const paginated = sortedStudents; // server đã phân trang sẵn
                         return (
@@ -772,10 +1103,10 @@ export default function LecturerCurrentExamPage() {
                                                 <th>STT</th>
                                                 <th>Mã SV</th>
                                                 <th onClick={() => handleSort("full_name")} style={{ cursor: "pointer", userSelect: "none", color: sortBy === "full_name" ? "#1e40af" : undefined }}>
-                                                    Họ và tên {sortBy === "full_name" ? (sortDir === "asc" ? "▲" : "▼") : <span style={{opacity:0.35}}>▲</span>}
+                                                    Họ và tên {sortBy === "full_name" ? (sortDir === "asc" ? "▲" : "▼") : <span style={{ opacity: 0.35 }}>▲</span>}
                                                 </th>
                                                 <th onClick={() => handleSort("class_code")} style={{ cursor: "pointer", userSelect: "none", color: sortBy === "class_code" ? "#1e40af" : undefined }}>
-                                                    Lớp {sortBy === "class_code" ? (sortDir === "asc" ? "▲" : "▼") : <span style={{opacity:0.35}}>▲</span>}
+                                                    Lớp {sortBy === "class_code" ? (sortDir === "asc" ? "▲" : "▼") : <span style={{ opacity: 0.35 }}>▲</span>}
                                                 </th>
                                                 <th>Thời gian</th>
                                                 <th>Trạng thái</th>
@@ -909,8 +1240,8 @@ export default function LecturerCurrentExamPage() {
                                         <td colSpan="6" style={{ textAlign: "center", padding: "48px 0" }}>
                                             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
                                                 <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="1.5">
-                                                    <circle cx="12" cy="12" r="10"/>
-                                                    <polyline points="12 6 12 12 16 14"/>
+                                                    <circle cx="12" cy="12" r="10" />
+                                                    <polyline points="12 6 12 12 16 14" />
                                                 </svg>
                                                 <div style={{ fontSize: 15, fontWeight: 500, color: "#94a3b8" }}>Hiện tại không có ca thi đang diễn ra</div>
                                                 <div style={{ fontSize: 13, color: "#cbd5e1" }}>Vui lòng chờ ca thi bắt đầu</div>
@@ -922,6 +1253,34 @@ export default function LecturerCurrentExamPage() {
                         </div>
                     </div>
                 </>
+            )}
+            {toast && (
+                <div style={{
+                    position: "fixed",
+                    top: 20,
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    zIndex: 9999,
+                    background: toast.type === "success" ? "#16a34a" : "#dc2626",
+                    color: "white",
+                    borderRadius: 10,
+                    boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
+                    minWidth: 260,
+                    maxWidth: 360,
+                    overflow: "hidden",
+                    animation: "toastIn 0.25s ease"
+                }}>
+                    <div style={{
+                        padding: "10px 14px",
+                        fontWeight: 600,
+                        borderBottom: "1px solid rgba(255,255,255,0.2)"
+                    }}>
+                        {toast.type === "success" ? "Thành công" : "Lỗi"}
+                    </div>
+                    <div style={{ padding: "10px 14px", fontSize: 13 }}>
+                        {toast.message}
+                    </div>
+                </div>
             )}
         </div>
     );
