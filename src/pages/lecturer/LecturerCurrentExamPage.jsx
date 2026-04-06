@@ -359,20 +359,22 @@ export default function LecturerCurrentExamPage() {
                 setStudents(updated);
                 setFilteredStudents(updated);
 
-                // 3. TỰ ĐỘNG QUAY LẠI CAMERA SAU 1.5 GIÂY ĐỂ CHỤP TIẾP
-                setTimeout(() => {
-                    setCapturedImage(null);
-                    refreshCameraStream();
-                    // Lưu ý: Không xóa faceAttendanceStatus ở đây để giảng viên vẫn thấy tên người vừa xong
-                }, 1500);
+          
 
             } else {
                 setFaceAttendanceStatus({ type: "error", message: backendMsg });
+               
             }
         } catch (err) {
             const errorDetail = err.response?.data?.message || "Lỗi hệ thống khi nhận diện";
             setFaceAttendanceStatus({ type: "error", message: errorDetail });
         } finally {
+
+            setTimeout(() => {
+                setCapturedImage(null);
+                refreshCameraStream();
+                // Lưu ý: Không xóa faceAttendanceStatus ở đây để giảng viên vẫn thấy tên người vừa xong
+            }, 1000);
             setLoading(false);
         }
     };
